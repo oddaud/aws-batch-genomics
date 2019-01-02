@@ -6,12 +6,21 @@ echo "Zip Tool Scripts & Create Template Bucket"
 
 zip -r tools.zip ./tools
 
+# Step 1: create-stack builds a stack on aws with the name batch-genomics-zone using the template file (local) template_cfn.yml
+
+# Step 2: Wait for the creation to finish 
+# aws cloudformation wait stack-create-complete = "Wait until stack status is CREATE_COMPLETE."
 aws cloudformation create-stack --stack-name batch-genomics-zone --template-body file://template_cfn.yml --capabilities CAPABILITY_NAMED_IAM --enable-termination-protection --output text;aws cloudformation wait stack-create-complete --stack-name batch-genomics-zone
 
 echo "Copy Nested Templates to S3 for Deployment"
 
+# returns pages of information in text format on the stack with the name batch-genomics-zone
+# Stacks[].Outputs[?OutputKey==`TemplatesBucket`].OutputValue = A JMESPath query to use in filtering the response data.
+
+# http://jmespath.org/tutorial.html
 TEMPLATES_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name batch-genomics-zone --query 'Stacks[].Outputs[?OutputKey==`TemplatesBucket`].OutputValue' --output text)
 TEMPLATES_BUCKET_ARN=$(aws cloudformation describe-stacks --stack-name batch-genomics-zone --query 'Stacks[].Outputs[?OutputKey==`TemplatesBucketArn`].OutputValue' --output text)
+
 aws s3 cp ./pipeline/nested_templates s3://${TEMPLATES_BUCKET_NAME} --recursive
 
 echo "Copy Build Scripts to S3 for Deployment"
@@ -26,8 +35,11 @@ echo "Deploy SSM Automation Docs for Image and Tools Deployment"
 
 aws cloudformation create-stack --stack-name batch-genomics-tools --template-body file://template_cfn.yml --capabilities CAPABILITY_NAMED_IAM --enable-termination-protection --output text --parameters ParameterKey=TemplatesBucketName,ParameterValue=${TEMPLATES_BUCKET_NAME} ParameterKey=TemplatesBucketArn,ParameterValue=${TEMPLATES_BUCKET_ARN};aws cloudformation wait stack-create-complete --stack-name batch-genomics-tools
 
+# Get the account ID
 ACCOUNT_ID=$(aws cloudformation describe-stacks --stack-name batch-genomics-tools --query 'Stacks[].Outputs[?OutputKey==`AccountId`].OutputValue' --output text)
+
 BUILD_AMI_DOC_NAME=$(aws cloudformation describe-stacks --stack-name batch-genomics-tools --query 'Stacks[].Outputs[?OutputKey==`BuildAMIDocumentName`].OutputValue' --output text)
+
 BUILD_TOOLS_DOC_NAME=$(aws cloudformation describe-stacks --stack-name batch-genomics-tools --query 'Stacks[].Outputs[?OutputKey==`BuildToolsDocumentName`].OutputValue' --output text)
 
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
